@@ -1,0 +1,11 @@
+# Code Style and Conventions
+- TypeScript is enabled with strict mode (`tsconfig.json` has `"strict": true`).
+- React components use function declarations and default exports for route/page components.
+- Project uses App Router conventions (`app/` directory).
+- Imports use double quotes and semicolons in current files.
+- Global type usage example: `import type { Metadata } from "next"`.
+- Layout props are strongly typed (`Readonly<{ children: React.ReactNode }>`).
+- Styling is primarily utility-class based (Tailwind classes in JSX) plus global CSS variables.
+- Font variables are defined in `layout.tsx` and consumed in CSS theme variables.
+- ESLint config inherits Next.js core-web-vitals + TypeScript recommended rules.
+- Path alias available: `@/*` maps to project root (`./*`).
