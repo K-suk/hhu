@@ -1,0 +1,40 @@
+name: Codex Auto-Implement
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  implement:
+    if: github.event.label.name == 'auto-implement'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ⚡️ Node.jsのセットアップとキャッシュの設定
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ⚡️ Codex CLIのグローバルインストールをキャッシュ
+      - name: Cache Codex CLI
+        id: cache-codex
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/node_modules/@openai/codex-cli
+          key: ${{ runner.os }}-codex-cli-v1
+
+      - name: Install Codex CLI
+        if: steps.cache-codex.outputs.cache-hit != 'true'
+        run: npm install -g @openai/codex-cli
+
+      - name: Run Codex Implementation
+        env:
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # AGENTS.mdの規約に従って自律実装を開始
+          codex "Read Issue #${{ github.event.issue.number }} and implement it according to AGENTS.md. Create a PR once verified."
