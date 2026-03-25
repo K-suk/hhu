@@ -15,3 +15,7 @@
 ## ADR 4: Design System
 - **Decision**: "Cyber-Academic" UI.
 - **Rationale**: Blending UBC's academic environment with a neon-lit, nightlife aesthetic using Tailwind CSS.
+
+## ADR 5: Database Change Management
+- **Decision**: `supabase/migrations/` is the source of truth for schema, RLS, grants, RPCs, triggers, and managed whitelist SQL.
+- **Rationale**: Live SQL Editor changes caused drift between the repository and the deployed database, which led to missing RPCs and permission regressions. Emergency SQL is still allowed, but it must be migrated back into the repo on the same day.

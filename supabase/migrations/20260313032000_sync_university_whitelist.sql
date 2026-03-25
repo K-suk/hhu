@@ -1,0 +1,50 @@
+-- Sync the current live university whitelist into source-controlled SQL.
+
+INSERT INTO public.university (
+  email_domain,
+  name,
+  min_age,
+  is_unlocked,
+  unlock_threshold
+)
+VALUES
+  ('asu.edu', 'Arizona State University', 21, false, 10),
+  ('brown.edu', 'Brown University', 21, false, 10),
+  ('buckeyemail.osu.edu', 'Ohio State University', 21, false, 10),
+  ('cmail.carleton.ca', 'Carleton University', 19, false, 10),
+  ('columbia.edu', 'Columbia University', 21, false, 10),
+  ('concordia.ca', 'Concordia University', 18, false, 10),
+  ('cornell.edu', 'Cornell University', 21, false, 10),
+  ('dartmouth.edu', 'Dartmouth College', 21, false, 10),
+  ('email.arizona.edu', 'University of Arizona', 21, false, 10),
+  ('email.kpu.ca', 'Kwantlen Polytechnic University', 19, false, 10),
+  ('email.tamu.edu', 'Texas A&M University', 21, false, 10),
+  ('harvard.edu', 'Harvard University', 21, false, 10),
+  ('knights.ucf.edu', 'University of Central Florida', 21, false, 10),
+  ('mail.mcgill.ca', 'McGill University', 18, false, 10),
+  ('mail.utoronto.ca', 'University of Toronto', 19, false, 10),
+  ('mavs.uta.edu', 'University of Texas at Arlington', 21, false, 10),
+  ('mcmaster.ca', 'McMaster University', 19, false, 10),
+  ('my.yorku.ca', 'York University', 19, false, 10),
+  ('myumanitoba.ca', 'University of Manitoba', 18, false, 10),
+  ('princeton.edu', 'Princeton University', 21, false, 10),
+  ('scarletmail.rutgers.edu', 'Rutgers University', 21, false, 10),
+  ('sfu.ca', 'Simon Fraser University', 19, false, 10),
+  ('student.ubc.ca', 'University of British Columbia (Student)', 19, true, 0),
+  ('torontomu.ca', 'Toronto Metropolitan University', 19, false, 10),
+  ('ualberta.ca', 'University of Alberta', 18, false, 10),
+  ('ubc.ca', 'University of British Columbia', 19, true, 0),
+  ('ucalgary.ca', 'University of Calgary', 18, false, 10),
+  ('ulaval.ca', 'Universite Laval', 18, false, 10),
+  ('umontreal.ca', 'Universite de Montreal', 18, false, 10),
+  ('uottawa.ca', 'University of Ottawa', 19, false, 10),
+  ('upenn.edu', 'University of Pennsylvania', 21, false, 10),
+  ('uvic.ca', 'University of Victoria', 19, false, 10),
+  ('uwaterloo.ca', 'University of Waterloo', 19, false, 10),
+  ('uwo.ca', 'Western University', 19, false, 10),
+  ('yale.edu', 'Yale University', 21, false, 10)
+ON CONFLICT (email_domain) DO UPDATE
+SET name = EXCLUDED.name,
+    min_age = EXCLUDED.min_age,
+    is_unlocked = EXCLUDED.is_unlocked,
+    unlock_threshold = EXCLUDED.unlock_threshold;

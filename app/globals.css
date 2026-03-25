@@ -8,8 +8,17 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary-amber: #FFB100;
+  --color-amber-glow: #ffbf00;
+  --color-background-dark: #101210;
+  --color-background-taproom: #101413;
+  --color-surface-dark: #1a211f;
+  --color-wood-dark: #2c241b;
+  --color-wood-light: #3e3226;
+  --color-stone-dark: #1c1c1c;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-space-grotesk);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,8 +28,272 @@
   }
 }
 
+html {
+  min-height: 100%;
+  background: #101210;
+}
+
 body {
-  background: var(--background);
+  min-height: 100dvh;
+  background: #101210;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overscroll-behavior-y: none;
+}
+
+/* Hide footer while profile edit modal is open */
+body.profile-edit-modal-open .taproom-footer {
+  display: none;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+@keyframes flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    text-shadow:
+      0 0 4px #FFB100,
+      0 0 11px #FFB100,
+      0 0 19px #FFB100,
+      0 0 40px #4d3300;
+    opacity: 1;
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+    opacity: 0.4;
+  }
+}
+
+.neon-text {
+  animation: flicker 4s infinite alternate;
+}
+
+/* Taproom */
+.neon-text-primary {
+  text-shadow: 0 0 5px rgba(255, 179, 0, 0.5), 0 0 10px rgba(255, 179, 0, 0.3);
+}
+.neon-text-amber {
+  text-shadow: 0 0 5px rgba(255, 191, 0, 0.5), 0 0 10px rgba(255, 191, 0, 0.3);
+}
+.neon-border {
+  box-shadow: 0 0 5px rgba(255, 179, 0, 0.2), inset 0 0 5px rgba(255, 179, 0, 0.1);
+}
+.wood-texture {
+  background-color: #26201a;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.2) 0px,
+    rgba(0, 0, 0, 0.2) 2px,
+    transparent 2px,
+    transparent 8px
+  );
+}
+.bg-chalkboard {
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.03) 1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+}
+
+@keyframes clink {
+  0% { transform: rotate(-5deg); }
+  100% { transform: rotate(5deg); }
+}
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+.animate-clink {
+  animation: clink 1s ease-in-out infinite alternate;
+}
+.animate-clink-reverse {
+  animation: clink 1s ease-in-out infinite alternate-reverse;
+}
+.animate-flicker-taproom {
+  animation: flicker 3s linear infinite;
+}
+
+/* Beer pouring (Waiting Line) */
+.beer-liquid {
+  background: linear-gradient(180deg, rgba(244, 175, 37, 0.9) 0%, rgba(200, 140, 20, 1) 100%);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+}
+.pixelated-foam {
+  background-image:
+    linear-gradient(45deg, #ffffff 25%, transparent 25%),
+    linear-gradient(-45deg, #ffffff 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ffffff 75%),
+    linear-gradient(-45deg, transparent 75%, #ffffff 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  image-rendering: pixelated;
+}
+@keyframes rise {
+  0%   { bottom: -10px; transform: translateX(0); opacity: 0; }
+  50%  { opacity: 1; }
+  100% { bottom: 100%; transform: translateX(-20px); opacity: 0; }
+}
+.bubble {
+  position: absolute;
+  bottom: -10px;
+  background-color: rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  animation: rise 4s infinite ease-in;
+}
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Scrollbar (Taproom) */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #101413;
+}
+::-webkit-scrollbar-thumb {
+  background: #2c241b;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ffb300;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes queue_flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% {
+    opacity: 1;
+  }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% {
+    opacity: 0.4;
+  }
+}
+
+/* Match Reveal Modal */
+@keyframes fadeScaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes scanLine {
+  0% { top: 0; }
+  50% { top: calc(100% - 2px); }
+  100% { top: 0; }
+}
+
+.scan-line {
+  animation: scanLine 2.4s ease-in-out infinite;
+}
+
+/* Beer fill animation (Waitlist) */
+@keyframes beerFill {
+  0% { y: 152; height: 0; }
+  100% { y: 12; height: 140; }
+}
+@keyframes foamGrow {
+  0%, 60% { ry: 0; }
+  100% { ry: 6; }
+}
+@keyframes foamGrow2 {
+  0%, 65% { ry: 0; }
+  100% { ry: 5; }
+}
+
+.beer-fill-anim {
+  animation: beerFill 8s ease-out forwards infinite;
+}
+.foam-anim {
+  animation: foamGrow 8s ease-out forwards infinite;
+}
+.foam-anim-2 {
+  animation: foamGrow2 8s ease-out 0.3s forwards infinite;
+}
+.foam-anim-3 {
+  animation: foamGrow2 8s ease-out 0.5s forwards infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Glitch effect (Match Reveal) */
+@keyframes glitchText {
+  0%, 100% { transform: translate(0); }
+  10% { transform: translate(-2px, 1px); }
+  20% { transform: translate(2px, -1px); }
+  30% { transform: translate(-1px, 2px); }
+  40% { transform: translate(1px, -2px); }
+  50% { transform: translate(-2px, 0); }
+  60% { transform: translate(2px, 1px); }
+  70% { transform: translate(0, -1px); }
+  80% { transform: translate(-1px, 0); }
+  90% { transform: translate(1px, 2px); }
+}
+.glitch-text {
+  animation: glitchText 3s ease-in-out infinite;
+}
+
+.avatar-grain {
+  filter: contrast(1.08) saturate(1.1) brightness(0.94);
+}
+
+@keyframes recoveryCrtFlicker {
+  0%, 100% { opacity: 0.06; }
+  8% { opacity: 0.16; }
+  16% { opacity: 0.05; }
+  24% { opacity: 0.14; }
+  38% { opacity: 0.08; }
+  54% { opacity: 0.18; }
+  68% { opacity: 0.07; }
+  82% { opacity: 0.12; }
+}
+
+@keyframes recoveryScanVertical {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.recovery-crt-flicker {
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0.03) 30%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  mix-blend-mode: screen;
+  animation: recoveryCrtFlicker 2.4s steps(2, end) infinite;
+}
+
+.recovery-scanline::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(245, 158, 11, 0) 0%,
+    rgba(245, 158, 11, 0.24) 50%,
+    rgba(245, 158, 11, 0) 100%
+  );
+  height: 22%;
+  animation: recoveryScanVertical 2.2s linear infinite;
 }
