@@ -1,0 +1,269 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".github/workflows/quality.yml"
+  workflow_dispatch:
+    inputs:
+      run_staging:
+        description: Run staging migration verification and Playwright
+        required: true
+        type: boolean
+        default: false
+      confirm_staging_backup:
+        description: Type YES after checking the staging backup/PITR restore point
+        required: false
+        type: string
+      staging_backup_at:
+        description: Latest completed backup or PITR restore-point timestamp (UTC)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+      - run: npm ci
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
+        run: npm run build
+
+  staging:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.run_staging &&
+      inputs.confirm_staging_backup == 'YES' &&
+      inputs.staging_backup_at != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    concurrency:
+      group: hhu-staging-database-verification
+      cancel-in-progress: false
+    env:
+      E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+      E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      E2E_USER_1_ID: ${{ secrets.E2E_USER_1_ID }}
+      E2E_USER_2_ID: ${{ secrets.E2E_USER_2_ID }}
+      E2E_USER_1_EMAIL: ${{ secrets.E2E_USER_1_EMAIL }}
+      E2E_USER_1_PASSWORD: ${{ secrets.E2E_USER_1_PASSWORD }}
+      E2E_USER_2_EMAIL: ${{ secrets.E2E_USER_2_EMAIL }}
+      E2E_USER_2_PASSWORD: ${{ secrets.E2E_USER_2_PASSWORD }}
+      E2E_REPORT_SUBMIT_URL: ${{ secrets.E2E_REPORT_SUBMIT_URL }}
+      E2E_REPORT_CONTROL_URL: ${{ secrets.E2E_REPORT_CONTROL_URL }}
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_REF: ${{ secrets.STAGING_PROJECT_REF }}
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+      - run: npm ci
+      - name: Validate staging configuration
+        shell: bash
+        run: |
+          missing=0
+          for name in \
+            STAGING_DATABASE_URL \
+            E2E_SUPABASE_URL \
+            E2E_SUPABASE_ANON_KEY \
+            E2E_SUPABASE_SERVICE_ROLE_KEY \
+            E2E_USER_1_ID \
+            E2E_USER_2_ID \
+            E2E_USER_1_EMAIL \
+            E2E_USER_1_PASSWORD \
+            E2E_USER_2_EMAIL \
+            E2E_USER_2_PASSWORD \
+            E2E_REPORT_SUBMIT_URL \
+            E2E_REPORT_CONTROL_URL \
+            UPSTASH_REDIS_REST_URL \
+            UPSTASH_REDIS_REST_TOKEN \
+            SUPABASE_ACCESS_TOKEN \
+            STAGING_PROJECT_REF
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing staging environment secret: ${name}"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Verify latest backup or PITR restore window
+        env:
+          STAGING_BACKUP_AT: ${{ inputs.staging_backup_at }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          date --date="$STAGING_BACKUP_AT" --iso-8601=seconds >/dev/null
+          backup_payload="$(
+            curl --fail --silent --show-error \
+              --retry 3 \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$STAGING_PROJECT_REF/database/backups"
+          )"
+          if ! printf '%s' "$backup_payload" | jq -e '
+            ([.backups[]? | select(.status == "COMPLETED")] | length > 0)
+            or (
+              .pitr_enabled == true
+              and .physical_backup_data.earliest_physical_backup_date_unix != null
+              and .physical_backup_data.latest_physical_backup_date_unix != null
+            )
+          ' >/dev/null; then
+            echo "::error::No completed backup or usable PITR restore window was found."
+            exit 1
+          fi
+          printf '%s' "$backup_payload" | jq '{
+            checked_at: (now | todateiso8601),
+            region,
+            pitr_enabled,
+            walg_enabled,
+            latest_completed_backup: (
+              [.backups[]? | select(.status == "COMPLETED")]
+              | sort_by(.inserted_at)
+              | last
+              | if . == null then null else {
+                  id,
+                  status,
+                  inserted_at,
+                  is_physical_backup
+                } end
+            ),
+            pitr_restore_window: .physical_backup_data
+          }' > staging-evidence/backup-metadata.json
+      - name: Record backup confirmation
+        run: |
+          mkdir -p staging-evidence
+          {
+            echo "# HHU staging verification"
+            echo
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Backup/PITR checked at: ${{ inputs.staging_backup_at }}"
+            echo "- Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } | tee staging-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Capture schema and deletion pre-flight
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e STAGING_DATABASE_URL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            postgres:17-alpine \
+            sh -eu -c 'pg_dump "$STAGING_DATABASE_URL" \
+              --schema-only \
+              --schema=public \
+              --no-owner \
+              --no-privileges \
+              --file=staging-evidence/schema-before.sql'
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e STAGING_DATABASE_URL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            postgres:17-alpine \
+            psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -f supabase/tests/daily_reset_preflight.sql \
+            | tee staging-evidence/preflight.txt
+      - name: Apply migration to staging only
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e STAGING_DATABASE_URL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            postgres:17-alpine \
+            psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 \
+              --single-transaction \
+              -f supabase/migrations/202607310001_secure_daily_reset_and_cron.sql
+      - name: Verify daily reset with dedicated synthetic users
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e STAGING_DATABASE_URL \
+            -e E2E_USER_1_ID \
+            -e E2E_USER_2_ID \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            postgres:17-alpine \
+            sh -eu -c 'psql "$STAGING_DATABASE_URL" \
+              -v ON_ERROR_STOP=1 \
+              -v test_user_1="$E2E_USER_1_ID" \
+              -v test_user_2="$E2E_USER_2_ID" \
+              -f supabase/tests/run_daily_reset_test.psql' \
+            | tee staging-evidence/synthetic-test.txt
+      - name: Verify cron, RLS, and function privileges
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e STAGING_DATABASE_URL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            postgres:17-alpine \
+            psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -f supabase/tests/daily_reset_postflight.sql \
+            | tee staging-evidence/postflight.txt
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Run four authenticated staging scenarios
+        env:
+          E2E_PRODUCTION_SERVER: "1"
+          E2E_JSON_REPORT: "1"
+        run: npm run test:e2e -- tests/e2e/staging-matching.spec.ts
+      - name: Require four passing scenarios and zero skips
+        run: >-
+          jq -e '.stats.expected == 4 and .stats.unexpected == 0
+          and .stats.skipped == 0 and .stats.flaky == 0'
+          staging-evidence/playwright-results.json
+      - name: Append database evidence to summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo
+            echo "## Database evidence"
+            echo '```text'
+            test -f staging-evidence/preflight.txt && cat staging-evidence/preflight.txt
+            test -f staging-evidence/synthetic-test.txt && cat staging-evidence/synthetic-test.txt
+            test -f staging-evidence/postflight.txt && cat staging-evidence/postflight.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload staging evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-verification-${{ github.run_id }}
+          path: |
+            staging-evidence/
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
