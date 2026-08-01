@@ -133,24 +133,30 @@ ORDER BY start_time DESC
 LIMIT 10;
 ```
 
-The GitHub `staging` environment must contain exactly these secrets before the
-manual Quality run. Enter values through `gh secret set --env staging` or the
-GitHub environment UI; never put them in command history or repository files:
+The GitHub `staging` environment must contain these secrets before the manual
+Quality run. Enter values through `gh secret set --env staging` or the GitHub
+environment UI; never put them in command history or repository files:
 
 - `STAGING_DATABASE_URL`
 - `E2E_SUPABASE_URL`, `E2E_SUPABASE_ANON_KEY`,
   `E2E_SUPABASE_SERVICE_ROLE_KEY`
 - `E2E_USER_1_ID`, `E2E_USER_1_EMAIL`, `E2E_USER_1_PASSWORD`
 - `E2E_USER_2_ID`, `E2E_USER_2_EMAIL`, `E2E_USER_2_PASSWORD`
-- `E2E_REPORT_SUBMIT_URL`, `E2E_REPORT_CONTROL_URL`
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
 - `SUPABASE_ACCESS_TOKEN` (fine-grained `backups_read` only)
 - `STAGING_PROJECT_REF`
 
+Set `E2E_REPORT_SUBMIT_URL` and `E2E_REPORT_CONTROL_URL` together when an
+existing switchable report mock is available. With both values, all four
+authenticated scenarios must pass with zero skips. With neither value, the two
+report retry cases are explicitly skipped and the matching/grading cases must
+still pass. Supplying only one report URL is a configuration error.
+
 Dispatch Quality against the implementation branch with `run_staging=true`,
 `confirm_staging_backup=YES`, and the verified UTC backup or PITR timestamp in
-`staging_backup_at`. The run must report `DAILY RESET TEST PASSED` and four
-authenticated Playwright passes with no skips.
+`staging_backup_at`. The run must report `DAILY RESET TEST PASSED`; full rollout
+acceptance additionally requires four authenticated Playwright passes with no
+skips after the report mock is configured.
 
 The workflow calls the read-only backup endpoint before opening a database
 connection. It keeps only the region, backup status/timestamp, and PITR restore
