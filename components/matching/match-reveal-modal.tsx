@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { CyberIdCard, type CyberIdProfile } from "@/components/profile/cyber-id-card";
 
@@ -22,16 +22,42 @@ const ACADEMIC_NOTES = [
   "Thesis: 'On the Correlation Between GPA and Alcohol Intake'",
 ];
 
+function getAcademicNote(matchId: string): string {
+  const seed = Array.from(matchId).reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0,
+  );
+  return ACADEMIC_NOTES[seed % ACADEMIC_NOTES.length];
+}
+
 export function MatchRevealModal({
+  matchId,
   courseLabel,
   partner,
   isEnteringBooth = false,
   onEnterBooth,
 }: MatchRevealModalProps) {
-  const academicNote = useMemo(
-    () => ACADEMIC_NOTES[Math.floor(Math.random() * ACADEMIC_NOTES.length)],
-    [],
-  );
+  const enterButtonRef = useRef<HTMLButtonElement>(null);
+  const academicNote = useMemo(() => getAcademicNote(matchId), [matchId]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    enterButtonRef.current?.focus();
+
+    function keepFocusInReveal(event: KeyboardEvent) {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        enterButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("keydown", keepFocusInReveal);
+    return () => {
+      document.removeEventListener("keydown", keepFocusInReveal);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-hidden font-display antialiased">
@@ -39,7 +65,13 @@ export function MatchRevealModal({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
 
       {/* Modal card */}
-      <div className="relative z-10 mx-4 w-full max-w-sm animate-[fadeScaleIn_0.5s_ease-out_both] rounded-3xl border-2 border-emerald-400/30 bg-stone-900/80 shadow-[0_0_80px_rgba(16,185,129,0.12),0_0_160px_rgba(16,185,129,0.06)] backdrop-blur-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="match-reveal-title"
+        aria-describedby="match-reveal-note"
+        className="relative z-10 mx-4 w-full max-w-sm animate-[fadeScaleIn_0.5s_ease-out_both] rounded-3xl border-2 border-emerald-400/30 bg-stone-900/80 shadow-[0_0_80px_rgba(16,185,129,0.12),0_0_160px_rgba(16,185,129,0.06)] backdrop-blur-xl"
+      >
         {/* Holographic sheen */}
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(110deg,transparent_25%,rgba(16,185,129,0.08)_45%,rgba(16,185,129,0.14)_50%,rgba(16,185,129,0.08)_55%,transparent_75%)] bg-[length:220%_100%] animate-[shimmer_4s_linear_infinite]" />
 
@@ -47,9 +79,12 @@ export function MatchRevealModal({
           {/* Header - Glitchy banner */}
           <div className="mb-4 text-center">
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.3em] text-emerald-400/60">
-              // System Notification
+              {"// System Notification"}
             </p>
-            <h2 className="glitch-text font-mono text-lg font-bold uppercase tracking-[0.15em] text-emerald-300 [text-shadow:0_0_8px_rgba(16,185,129,0.4),0_0_20px_rgba(16,185,129,0.2)] md:text-xl">
+            <h2
+              id="match-reveal-title"
+              className="glitch-text font-mono text-lg font-bold uppercase tracking-[0.15em] text-emerald-300 [text-shadow:0_0_8px_rgba(16,185,129,0.4),0_0_20px_rgba(16,185,129,0.2)] md:text-xl"
+            >
               Seminar Partner Assigned
             </h2>
             <div className="mx-auto mt-2 h-px w-3/4 bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
@@ -73,7 +108,10 @@ export function MatchRevealModal({
               <span className="material-symbols-outlined mt-0.5 text-sm text-emerald-400/60">
                 description
               </span>
-              <p className="font-mono text-xs leading-relaxed text-emerald-400/70">
+              <p
+                id="match-reveal-note"
+                className="font-mono text-xs leading-relaxed text-emerald-400/70"
+              >
                 &quot;{academicNote}&quot;
               </p>
             </div>
@@ -81,10 +119,12 @@ export function MatchRevealModal({
 
           {/* CTA */}
           <button
+            ref={enterButtonRef}
             type="button"
             onClick={onEnterBooth}
             disabled={isEnteringBooth}
-            className="group/btn relative w-full overflow-hidden rounded-full bg-primary-amber p-[1px]"
+            aria-busy={isEnteringBooth}
+            className="group/btn relative w-full overflow-hidden rounded-full bg-primary-amber p-[1px] disabled:cursor-wait disabled:opacity-70"
           >
             <div className="pointer-events-none absolute inset-0 translate-x-[-100%] bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-1000 group-hover/btn:translate-x-[100%]" />
             <div className="relative flex h-14 w-full items-center justify-center rounded-full border border-primary-amber/50 bg-stone-950/90 transition-all group-hover/btn:bg-primary-amber">

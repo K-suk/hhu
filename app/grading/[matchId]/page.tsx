@@ -11,6 +11,8 @@ type GradingPageProps = {
 
 export default async function GradingPage({ params }: GradingPageProps) {
   const { matchId } = await params;
+  let gradingProps: React.ComponentProps<typeof GradeSelectionCard>;
+
   try {
     const session = await requireAuth();
     const authorizedMatch = await requireMatchParticipant(session, matchId);
@@ -29,14 +31,11 @@ export default async function GradingPage({ params }: GradingPageProps) {
       redirect("/");
     }
 
-    return (
-      <GradeSelectionCard
-        matchId={authorizedMatch.match.id}
-        courseLabel={authorizedMatch.match.course_id ?? "Unknown Course"}
-        ratedUserId={authorizedMatch.partnerUserId}
-        userId={session.user.id}
-      />
-    );
+    gradingProps = {
+      matchId: authorizedMatch.match.id,
+      courseLabel: authorizedMatch.match.course_id ?? "Unknown Course",
+      ratedUserId: authorizedMatch.partnerUserId,
+    };
   } catch (error) {
     if (error instanceof AuthenticationError) {
       redirect("/login");
@@ -48,4 +47,6 @@ export default async function GradingPage({ params }: GradingPageProps) {
 
     throw error;
   }
+
+  return <GradeSelectionCard {...gradingProps} />;
 }

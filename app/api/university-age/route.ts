@@ -33,10 +33,9 @@ export async function GET(request: Request) {
   if (error) {
     return NextResponse.json(
       {
-        isKnown: false,
-        minAge: inferMinAgeFromDomain(parsed.data.domain),
+        message: "University eligibility is temporarily unavailable.",
       },
-      { status: 200 },
+      { status: 503 },
     );
   }
 

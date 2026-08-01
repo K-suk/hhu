@@ -4,7 +4,6 @@ import { ProfilePageClient } from "@/components/profile/profile-page-client";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 
-type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 type MatchRow = Database["public"]["Tables"]["matches"]["Row"];
 
 export default async function ProfilePage() {
@@ -38,7 +37,6 @@ export default async function ProfilePage() {
 
   return (
     <ProfilePageClient
-      userId={user.id}
       initialProfile={profile}
       recentMatches={safeMatches}
     />

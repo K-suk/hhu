@@ -1,0 +1,5 @@
+\set ON_ERROR_STOP on
+
+SELECT set_config('hhu.test_user_1', :'test_user_1', false);
+SELECT set_config('hhu.test_user_2', :'test_user_2', false);
+\ir daily_reset_job.sql

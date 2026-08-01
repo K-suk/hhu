@@ -4,9 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
+  },
+  "engines": {
+    "node": ">=22.22.2"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -16,7 +25,7 @@
     "@upstash/redis": "^1.36.4",
     "@vercel/functions": "^3.4.3",
     "framer-motion": "^12.34.3",
-    "next": "16.1.6",
+    "next": "16.2.12",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.1",
@@ -27,12 +36,22 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint": "9.39.2",
+    "@playwright/test": "1.61.1",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "eslint-config-next": "16.2.12",
+    "jsdom": "29.1.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "4.1.10"
   },
   "overrides": {
-    "ajv": "^8.18.0"
+    "postcss": "8.5.25",
+    "sharp": "0.35.0",
+    "ws": "8.21.1"
   }
 }

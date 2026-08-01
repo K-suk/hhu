@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
@@ -79,7 +79,7 @@ async function getProfileGateState(
   };
 }
 
-export async function middleware(request: NextRequest, _event: NextFetchEvent) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request,
   });

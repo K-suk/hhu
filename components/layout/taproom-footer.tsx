@@ -42,7 +42,10 @@ export function TaproomFooter() {
   }
 
   return (
-    <nav className="taproom-footer fixed bottom-0 left-0 z-50 w-full border-t border-[#283932] bg-[#1b2722]/90 px-2 pb-4 pt-2 backdrop-blur-lg">
+    <nav
+      aria-label="Primary navigation"
+      className="taproom-footer fixed bottom-0 left-0 z-50 w-full border-t border-[#283932] bg-[#1b2722]/90 px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-lg"
+    >
       <div className="mx-auto flex max-w-lg items-center justify-between">
         {NAV_ITEMS.map((item) => {
           const active = item.match(pathname);
@@ -50,8 +53,9 @@ export function TaproomFooter() {
             <Link
               key={item.href}
               href={item.href}
-              className="group flex flex-1 flex-col items-center justify-end gap-1"
+              className="group flex min-h-12 flex-1 flex-col items-center justify-end gap-1 rounded-lg"
               aria-label={item.label}
+              aria-current={active ? "page" : undefined}
             >
               <div className="relative flex items-center justify-center p-1 transition-transform group-hover:-translate-y-1">
                 {active ? (
@@ -63,6 +67,7 @@ export function TaproomFooter() {
                       ? "neon-text-primary text-primary-amber"
                       : "text-[#9cbaad] group-hover:text-white"
                   }`}
+                  aria-hidden="true"
                 >
                   {item.icon}
                 </span>

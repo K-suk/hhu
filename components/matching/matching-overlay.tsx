@@ -21,6 +21,15 @@ const TERMINAL_LINES = [
   "> If you choose to drink, keep it moderate. Your future self will thank you.",
 ];
 
+function rotateSafetyTips(courseLabel: string): string[] {
+  const offset = Array.from(courseLabel).reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0,
+  ) % TERMINAL_LINES.length;
+
+  return [...TERMINAL_LINES.slice(offset), ...TERMINAL_LINES.slice(0, offset)];
+}
+
 export function MatchingOverlay({
   courseLabel,
   broadenedSearchLabel,
@@ -48,20 +57,13 @@ export function MatchingOverlay({
     };
   }, [onReady]);
 
-  const shuffled = useMemo(() => {
-    const copy = [...TERMINAL_LINES];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  }, []);
+  const safetyTips = useMemo(() => rotateSafetyTips(courseLabel), [courseLabel]);
 
   useEffect(() => {
     let idx = 0;
     const interval = setInterval(() => {
-      if (idx < shuffled.length) {
-        setVisibleLines((prev) => [...prev, shuffled[idx]]);
+      if (idx < safetyTips.length) {
+        setVisibleLines((prev) => [...prev, safetyTips[idx]]);
         idx++;
       } else {
         idx = 0;
@@ -69,10 +71,9 @@ export function MatchingOverlay({
       }
     }, 2200);
     return () => clearInterval(interval);
-  }, [shuffled]);
+  }, [safetyTips]);
 
   useEffect(() => {
-    setIsBroadenedSearch(false);
     const timeoutId = window.setTimeout(() => {
       setIsBroadenedSearch(true);
     }, 30_000);
@@ -109,12 +110,12 @@ export function MatchingOverlay({
             onClick={onCancel}
             disabled={isCancelling}
             className="flex items-center justify-center rounded-full p-2 text-white transition-colors hover:bg-white/5 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Back"
+            aria-label="Cancel search"
           >
             <span className="material-symbols-outlined !text-2xl">arrow_back</span>
           </button>
           <h1 className="font-mono text-sm tracking-widest text-white/80 uppercase">
-            HHU SERVER: <span className="text-red-500 animate-pulse">CRITICAL</span>
+            HHU MATCHING: <span className="text-emerald-400 animate-pulse">ACTIVE</span>
           </h1>
           <div className="w-10" />
         </header>
@@ -122,21 +123,21 @@ export function MatchingOverlay({
         {/* Main content */}
         <main className="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-6">
           {/* Headline */}
-          <div className="w-full space-y-2 text-center">
-            <h2 className="font-mono text-lg leading-relaxed font-bold text-amber-300 uppercase [text-shadow:0_0_5px_rgba(251,191,36,0.3),0_0_15px_rgba(251,191,36,0.2),0_0_30px_rgba(251,191,36,0.15)] [animation:queue_flicker_3s_linear_infinite] md:text-xl">
-              Server is hungover.
+          <div className="w-full space-y-2 text-center" role="status" aria-live="polite">
+            <h2 className="font-mono text-lg leading-relaxed font-bold text-amber-300 uppercase [text-shadow:0_0_5px_rgba(251,191,36,0.3),0_0_15px_rgba(251,191,36,0.2),0_0_30px_rgba(251,191,36,0.15)] md:text-xl">
+              Finding your match.
               <br />
-              Please stand by.
+              You can cancel at any time.
             </h2>
             <p className="font-mono text-xs tracking-widest text-stone-500 uppercase">
-              [ ERR_ALCOHOL_LEVEL_CRITICAL ]
+              [ QUEUE ACTIVE ]
             </p>
             <p className="font-mono text-[11px] tracking-wider text-primary-amber/70 uppercase">
               Course: {courseLabel}
             </p>
             {isBroadenedSearch ? (
               <p className="font-mono text-[11px] tracking-wider text-emerald-400/80 uppercase">
-                {`> BROADENING SEARCH: Looking for any students at ${broadenedSearchLabel}...`}
+                {`> SEARCH EXPANDED: Looking across ${broadenedSearchLabel}...`}
               </p>
             ) : null}
           </div>
@@ -235,8 +236,8 @@ export function MatchingOverlay({
               <div className="absolute inset-0 h-full w-full rounded-md border border-red-500/30 bg-red-950/30 transition-all group-hover:bg-red-900/40" />
               <div className="absolute inset-0 h-full w-full rounded-md shadow-[0_0_15px_rgba(220,38,38,0.15)] transition-all group-hover:shadow-[0_0_25px_rgba(220,38,38,0.3)]" />
               <span className="relative flex shrink-0 items-center justify-center gap-3 whitespace-nowrap font-mono text-sm tracking-wider text-red-400 uppercase group-hover:text-red-300">
-                <span className="material-symbols-outlined text-xl">liquor</span>
-                {isCancelling ? "Spilling..." : "Spill the Beer"}
+                <span className="material-symbols-outlined text-xl">close</span>
+                {isCancelling ? "Cancelling..." : "Cancel search"}
               </span>
             </button>
           </div>

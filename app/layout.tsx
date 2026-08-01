@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 
 import { TaproomFooter } from "@/components/layout/taproom-footer";
 import { TaproomHeader } from "@/components/layout/taproom-header";
@@ -7,19 +7,32 @@ import { ToastProvider } from "@/components/ui/toast-provider";
 
 import "./globals.css";
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: "../public/fonts/Geist-Variable.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  display: "swap",
+  weight: "100 900",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../public/fonts/GeistMono-Variable.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
+  weight: "100 900",
 });
 
-const spaceGrotesk = Space_Grotesk({
+const spaceGrotesk = localFont({
+  src: "../public/fonts/SpaceGrotesk-Variable.woff2",
   variable: "--font-space-grotesk",
-  subsets: ["latin"],
+  display: "swap",
+  weight: "300 700",
+});
+
+const materialSymbols = localFont({
+  src: "../public/fonts/MaterialSymbolsOutlined.woff2",
+  variable: "--font-material-symbols",
+  display: "swap",
+  weight: "100 700",
 });
 
 export const metadata: Metadata = {
@@ -34,14 +47,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${materialSymbols.variable} antialiased`}
       >
         <ToastProvider>
           <TaproomHeader />

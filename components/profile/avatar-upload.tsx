@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import NextImage from "next/image";
 
 import { uploadAvatarAction } from "@/app/actions/upload-avatar";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import {
 import { CSRF_FORM_FIELD_NAME } from "@/lib/security/csrf-shared";
 
 type AvatarUploadProps = {
-  userId: string;
   csrfToken: string;
   initialAvatarUrl?: string | null;
   onUploaded?: (avatarUrl: string) => void;
@@ -110,13 +110,11 @@ async function compressAvatar(file: File): Promise<Blob> {
 
 export function AvatarUpload({
   csrfToken,
-  userId: _userId,
   initialAvatarUrl = null,
   onUploaded,
 }: AvatarUploadProps) {
   const { showToast } = useToast();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const [selectedBlob, setSelectedBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(initialAvatarUrl);
@@ -127,10 +125,6 @@ export function AvatarUpload({
   const isBusy = isProcessing || isUploading;
 
   useEffect(() => {
-    setPreviewUrl(initialAvatarUrl);
-  }, [initialAvatarUrl]);
-
-  useEffect(() => {
     return () => {
       if (previewUrl?.startsWith("blob:")) {
         URL.revokeObjectURL(previewUrl);
@@ -139,12 +133,7 @@ export function AvatarUpload({
   }, [previewUrl]);
 
   useEffect(() => {
-    if (!isBusy) {
-      setScanProgress(0);
-      return;
-    }
-
-    setScanProgress(8);
+    if (!isBusy) return;
     const intervalId = setInterval(() => {
       setScanProgress((prev) => {
         if (prev >= 96) {
@@ -158,10 +147,7 @@ export function AvatarUpload({
   }, [isBusy]);
 
   useEffect(() => {
-    if (!isBusy) {
-      setLogIndex(0);
-      return;
-    }
+    if (!isBusy) return;
 
     const intervalId = setInterval(() => {
       setLogIndex((prev) => (prev + 1) % SYSTEM_LOGS.length);
@@ -174,24 +160,6 @@ export function AvatarUpload({
     showToast(`SYSTEM ERROR // ${message}`, "error");
   }
 
-  async function handleOpenCamera() {
-    try {
-      if ("permissions" in navigator && navigator.permissions?.query) {
-        const status = await navigator.permissions.query({
-          name: "camera" as PermissionName,
-        });
-        if (status.state === "denied") {
-          showSystemError("User rejected camera access.");
-          return;
-        }
-      }
-    } catch {
-      // No-op: fallback to opening capture input.
-    }
-
-    cameraInputRef.current?.click();
-  }
-
   async function handleChooseFile(file: File) {
     const fileValidationError = validateImageFile(file);
     if (fileValidationError) {
@@ -199,6 +167,8 @@ export function AvatarUpload({
       return;
     }
 
+    setScanProgress(8);
+    setLogIndex(0);
     setIsProcessing(true);
     try {
       const compressed = await compressAvatar(file);
@@ -239,6 +209,8 @@ export function AvatarUpload({
       return;
     }
 
+    setScanProgress(8);
+    setLogIndex(0);
     setIsUploading(true);
     const uploadFile = new File([selectedBlob], "avatar-upload.jpg", {
       type: selectedBlob.type || "image/jpeg",
@@ -280,10 +252,13 @@ export function AvatarUpload({
 
         <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-[#00ff88]/30 bg-black/40">
           {previewUrl ? (
-            <img
+            <NextImage
               src={previewUrl}
               alt="Avatar preview"
-              className="h-full w-full object-cover [image-rendering:pixelated]"
+              fill
+              sizes="(max-width: 640px) calc(100vw - 3rem), 28rem"
+              unoptimized
+              className="object-cover [image-rendering:pixelated]"
             />
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center text-[#00ff88]/50">
@@ -312,22 +287,6 @@ export function AvatarUpload({
             event.currentTarget.value = "";
           }}
         />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept={ACCEPTED_IMAGE_TYPES}
-          capture="environment"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file) {
-              return;
-            }
-            void handleChooseFile(file);
-            event.currentTarget.value = "";
-          }}
-        />
-
         <div className="mt-3">
           <Button
             type="button"

@@ -10,6 +10,9 @@ export async function resendVerificationEmailAction(
   _prevState: AuthActionState,
   _formData: FormData,
 ): Promise<AuthActionState> {
+  void _prevState;
+  void _formData;
+
   const rateLimit = await checkRateLimitForServerAction("auth");
 
   if (!rateLimit.success) {
