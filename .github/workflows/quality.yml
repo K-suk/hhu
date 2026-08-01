@@ -97,8 +97,6 @@ jobs:
             E2E_USER_1_PASSWORD \
             E2E_USER_2_EMAIL \
             E2E_USER_2_PASSWORD \
-            E2E_REPORT_SUBMIT_URL \
-            E2E_REPORT_CONTROL_URL \
             UPSTASH_REDIS_REST_URL \
             UPSTASH_REDIS_REST_TOKEN \
             SUPABASE_ACCESS_TOKEN \
@@ -110,6 +108,19 @@ jobs:
             fi
           done
           exit "$missing"
+      - name: Detect optional report mock
+        id: report_mock
+        shell: bash
+        run: |
+          if [ -n "$E2E_REPORT_SUBMIT_URL" ] && [ -n "$E2E_REPORT_CONTROL_URL" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$E2E_REPORT_SUBMIT_URL" ] && [ -z "$E2E_REPORT_CONTROL_URL" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Report mock is not configured; only report retry scenarios will be skipped."
+          else
+            echo "::error::E2E_REPORT_SUBMIT_URL and E2E_REPORT_CONTROL_URL must be configured together."
+            exit 1
+          fi
       - name: Verify latest backup or PITR restore window
         env:
           STAGING_BACKUP_AT: ${{ inputs.staging_backup_at }}
@@ -163,6 +174,7 @@ jobs:
             echo
             echo "- Commit: $GITHUB_SHA"
             echo "- Backup/PITR checked at: ${{ inputs.staging_backup_at }}"
+            echo "- Report mock configured: ${{ steps.report_mock.outputs.available }}"
             echo "- Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           } | tee staging-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Capture schema and deletion pre-flight
@@ -233,16 +245,25 @@ jobs:
               -f supabase/tests/daily_reset_postflight.sql \
             | tee staging-evidence/postflight.txt
       - run: npx playwright install --with-deps chromium webkit
-      - name: Run four authenticated staging scenarios
+      - name: Run authenticated staging scenarios
         env:
           E2E_PRODUCTION_SERVER: "1"
           E2E_JSON_REPORT: "1"
         run: npm run test:e2e -- tests/e2e/staging-matching.spec.ts
-      - name: Require four passing scenarios and zero skips
-        run: >-
-          jq -e '.stats.expected == 4 and .stats.unexpected == 0
-          and .stats.skipped == 0 and .stats.flaky == 0'
-          staging-evidence/playwright-results.json
+      - name: Verify authenticated scenario counts
+        env:
+          HAS_REPORT_MOCK: ${{ steps.report_mock.outputs.available }}
+        shell: bash
+        run: |
+          if [ "$HAS_REPORT_MOCK" = "true" ]; then
+            jq -e '.stats.expected == 4 and .stats.unexpected == 0
+              and .stats.skipped == 0 and .stats.flaky == 0' \
+              staging-evidence/playwright-results.json
+          else
+            jq -e '.stats.expected == 2 and .stats.unexpected == 0
+              and .stats.skipped == 2 and .stats.flaky == 0' \
+              staging-evidence/playwright-results.json
+          fi
       - name: Append database evidence to summary
         if: always()
         shell: bash

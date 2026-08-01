@@ -1,32 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { MatchRevealModal } from "@/components/matching/match-reveal-modal";
 import { MatchingOverlay } from "@/components/matching/matching-overlay";
+import {
+  COURSES,
+  useMatchingSession,
+} from "@/components/matching/use-matching-session";
 import { useSessionRecovery } from "@/components/recovery/session-recovery-provider";
 import { useToast } from "@/components/ui/toast-provider";
-import {
-  getFriendlyErrorMessage,
-  handleProtectedResponse,
-} from "@/lib/client/security-ui";
-import { createClient } from "@/lib/supabase/client";
-import { CSRF_HEADER_NAME } from "@/lib/security/csrf-shared";
-import { getCsrfToken } from "@/lib/security/csrf-client";
 import type { Database } from "@/lib/supabase/database.types";
-import { enrolCourseSchema } from "@/lib/validations/matching";
-
-type Course = {
-  id: string;
-  label: string;
-  code: string;
-  badge: "Core" | "Elec" | "Lab";
-  abv: string;
-  ibu: string;
-  /** Optional image URL for the course card. When set, shown in the left panel; otherwise a gradient is used. */
-  imageUrl?: string | null;
-};
 
 type MatchingHubProps = {
   userId: string;
@@ -36,78 +22,6 @@ type MatchingHubProps = {
   pendingCourseId?: string | null;
 };
 
-const COURSES: Course[] = [
-  {
-    id: "beer-101",
-    label: "BEER 101",
-    code: "From keg to glass: applied thermodynamics and friendship formation.",
-    badge: "Core",
-    abv: "5.0%",
-    ibu: "25",
-    imageUrl: "/images/beer101.jpg",
-  },
-  // {
-  //   id: "wine-201",
-  //   label: "WINE 201",
-  //   code: "Sommelier tactics. Tannins, terroir, and talking slightly pretentious.",
-  //   badge: "Elec",
-  //   abv: "12.5%",
-  //   ibu: "10",
-  //   imageUrl: "/images/wine201.jpg",
-  // },
-  // {
-  //   id: "tequila-301",
-  //   label: "TEQUILA 911",
-  //   code: "Advanced Shots & Mixology. For people who wanna fxxed up.",
-  //   badge: "Lab",
-  //   abv: "38.0%",
-  //   ibu: "95",
-  //   imageUrl: "/images/teq911.jpg",
-  // },
-];
-
-type EnrolCourseResponse =
-  | string
-  | null
-  | { match_id: string | null }
-  | { match_id?: string | null }[];
-
-function extractMatchId(response: EnrolCourseResponse): string | null {
-  if (!response) return null;
-  if (typeof response === "string") return response;
-  if (Array.isArray(response)) return response[0]?.match_id ?? null;
-  return response.match_id ?? null;
-}
-
-function getCourseById(courseId: string | null | undefined): Course | null {
-  if (!courseId) return null;
-  const knownCourse = COURSES.find((course) => course.id === courseId);
-  if (knownCourse) return knownCourse;
-
-  return {
-    id: courseId,
-    label: courseId.toUpperCase(),
-    code: "Recovered from active queue session.",
-    badge: "Core",
-    abv: "--",
-    ibu: "--",
-    imageUrl: null,
-  };
-}
-
-function getRecoveredWaitingCourse(fallbackCourse: Course | null): Course {
-  if (fallbackCourse) return fallbackCourse;
-
-  return {
-    id: "queue-recovery",
-    label: "QUEUE SYNC",
-    code: "Recovered waiting state from profile status.",
-    badge: "Core",
-    abv: "--",
-    ibu: "--",
-    imageUrl: null,
-  };
-}
 
 function ClinkMugs() {
   return (
@@ -172,16 +86,6 @@ function ClinkMugs() {
   );
 }
 
-type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
-type PartnerPreview = Pick<ProfileRow, "display_name" | "avatar_url" | "department">;
-
-type RevealState = {
-  matchId: string;
-  partner: PartnerPreview;
-};
-
-const MATCH_ENTRY_RETRY_DELAYS_MS = [0, 200, 400, 800, 1200] as const;
-
 export function MatchingHub({
   userId,
   genderIdentity,
@@ -190,7 +94,6 @@ export function MatchingHub({
   pendingCourseId,
 }: MatchingHubProps) {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const { showToast } = useToast();
   const {
     initialProfileStatus,
@@ -199,378 +102,37 @@ export function MatchingHub({
     markStateRestored,
   } = useSessionRecovery();
 
-  const restoredCourse = useMemo(
-    () => getCourseById(pendingCourseId),
-    [pendingCourseId],
+  const onNavigate = useCallback((path: string) => router.push(path), [router]);
+  const onUnauthorized = useCallback(() => router.push("/login"), [router]);
+  const onToast = useCallback(
+    (message: string, kind: "success" | "error" | "info") => showToast(message, kind),
+    [showToast],
   );
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSearching, setIsSearching] = useState(!!restoredCourse);
-  const [isCancelling, setIsCancelling] = useState(false);
-  const [isEnteringBooth, setIsEnteringBooth] = useState(false);
-  const [activeCourse, setActiveCourse] = useState<Course | null>(restoredCourse);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [revealState, setRevealState] = useState<RevealState | null>(null);
-  const hasMarkedRecoveryCompleteRef = useRef(false);
-
-  const markRecoveryCompleteOnce = useCallback(() => {
-    if (hasMarkedRecoveryCompleteRef.current) return;
-    hasMarkedRecoveryCompleteRef.current = true;
-    markStateRestored();
-  }, [markStateRestored]);
-
-  const fetchPartnerAndReveal = useCallback(
-    async (matchId: string, match: Database["public"]["Tables"]["matches"]["Row"]) => {
-      const partnerId = match.user_1 === userId ? match.user_2 : match.user_1;
-      if (!partnerId) {
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .rpc("get_partner_profile", {
-          target_profile_id: partnerId,
-        })
-        .maybeSingle();
-
-      if (profile) {
-        setRevealState({ matchId, partner: profile });
-      }
-    },
-    [supabase, userId],
-  );
-
-  const resolveMatchedState = useCallback(async (): Promise<boolean> => {
-    const { data: ongoingMatch, error } = await supabase
-      .from("matches")
-      .select("*")
-      .or(`user_1.eq.${userId},user_2.eq.${userId}`)
-      .in("status", ["active", "finished"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !ongoingMatch?.id) return false;
-
-    const recoveredCourse =
-      getCourseById(ongoingMatch.course_id) ?? getRecoveredWaitingCourse(restoredCourse);
-    setActiveCourse(recoveredCourse);
-    setIsSearching(false);
-    await fetchPartnerAndReveal(ongoingMatch.id, ongoingMatch);
-    return true;
-  }, [fetchPartnerAndReveal, restoredCourse, supabase, userId]);
-
-  useEffect(() => {
-    if (isSessionChecking) return;
-
-    let isMounted = true;
-    let shouldKeepRecoveryVisible = false;
-
-    async function recoverStateOnMount() {
-      try {
-        const { data: ongoingMatch, error: ongoingMatchError } = await supabase
-          .from("matches")
-          .select("*")
-          .or(`user_1.eq.${userId},user_2.eq.${userId}`)
-          .in("status", ["active", "finished"])
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (!isMounted) return;
-
-        if (!ongoingMatchError && ongoingMatch?.id) {
-          shouldKeepRecoveryVisible = true;
-          setIsSearching(false);
-          setActiveCourse(null);
-          router.push(`/chat/${ongoingMatch.id}`);
-          return;
-        }
-
-        const queueResult = await supabase
-          .from("queues")
-          .select("course_id")
-          .eq("user_id", userId)
-          .limit(1);
-
-        if (!isMounted) return;
-
-        if (queueResult.error) {
-          setErrorMessage(getFriendlyErrorMessage(queueResult.error.message));
-        }
-
-        const queueCourseId = queueResult.data?.[0]?.course_id ?? null;
-        const profileStatus = initialProfileStatus;
-        const shouldRecoverWaiting =
-          profileStatus === "waiting" ||
-          (profileStatus !== "matched" && Boolean(restoredCourse)) ||
-          Boolean(queueCourseId);
-
-        if (profileStatus === "matched") {
-          const hasActiveMatch = await resolveMatchedState();
-          if (hasActiveMatch) {
-            shouldKeepRecoveryVisible = true;
-            return;
-          }
-
-          shouldKeepRecoveryVisible = true;
-          setIsSearching(true);
-          setActiveCourse(getCourseById(queueCourseId) ?? getRecoveredWaitingCourse(restoredCourse));
-          return;
-        }
-
-        if (shouldRecoverWaiting) {
-          shouldKeepRecoveryVisible = true;
-          setActiveCourse(getCourseById(queueCourseId) ?? getRecoveredWaitingCourse(restoredCourse));
-          setIsSearching(true);
-        } else {
-          setIsSearching(false);
-          setActiveCourse(null);
-        }
-      } finally {
-        if (isMounted && !shouldKeepRecoveryVisible) {
-          markRecoveryCompleteOnce();
-        }
-      }
-    }
-
-    void recoverStateOnMount();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    initialProfileStatus,
+  const {
+    isSubmitting,
+    isSearching,
+    isCancelling,
+    isEnteringBooth,
+    activeCourse,
+    errorMessage,
+    revealState,
     markRecoveryCompleteOnce,
-    restoredCourse,
-    router,
-    isSessionChecking,
-    supabase,
+    enterBooth,
+    enrolCourse,
+    cancelSearch,
+  } = useMatchingSession({
     userId,
-    resolveMatchedState,
-  ]);
-
-  useEffect(() => {
-    const matchesChannel = supabase
-      .channel(`matches-passive-${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "matches",
-          filter: `user_1=eq.${userId}`,
-        },
-        (payload) => {
-          const inserted = payload.new as Database["public"]["Tables"]["matches"]["Row"];
-          if (inserted.id) {
-            setIsSearching(false);
-            void fetchPartnerAndReveal(inserted.id, inserted);
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "matches",
-          filter: `user_2=eq.${userId}`,
-        },
-        (payload) => {
-          const inserted = payload.new as Database["public"]["Tables"]["matches"]["Row"];
-          if (inserted.id) {
-            setIsSearching(false);
-            void fetchPartnerAndReveal(inserted.id, inserted);
-          }
-        },
-      )
-      .subscribe();
-
-    const profileChannel = supabase
-      .channel(`profile-status-${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "profiles",
-          filter: `id=eq.${userId}`,
-        },
-        (payload) => {
-          const updated = payload.new as Database["public"]["Tables"]["profiles"]["Row"];
-
-          if (updated.status === "matched") {
-            void resolveMatchedState().then((hasActiveMatch) => {
-              if (!hasActiveMatch) {
-                setIsSearching(true);
-                setActiveCourse((prev) => prev ?? getRecoveredWaitingCourse(restoredCourse));
-              }
-            });
-            return;
-          }
-
-          if (updated.status === "waiting") {
-            setIsSearching(true);
-            setActiveCourse((prev) => prev ?? getRecoveredWaitingCourse(restoredCourse));
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(matchesChannel);
-      void supabase.removeChannel(profileChannel);
-    };
-  }, [fetchPartnerAndReveal, resolveMatchedState, restoredCourse, supabase, userId]);
-
-  useEffect(() => {
-    if (!isSearching || revealState) {
-      return;
-    }
-
-    let cancelled = false;
-    const intervalId = window.setInterval(() => {
-      void resolveMatchedState().then((hasActiveMatch) => {
-        if (cancelled || !hasActiveMatch) {
-          return;
-        }
-
-        window.clearInterval(intervalId);
-      });
-    }, 2000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [isSearching, revealState, resolveMatchedState]);
-
-  async function handleEnterBooth(matchId: string) {
-    if (isEnteringBooth) {
-      return;
-    }
-
-    setIsEnteringBooth(true);
-    setErrorMessage("");
-
-    for (const retryDelayMs of MATCH_ENTRY_RETRY_DELAYS_MS) {
-      if (retryDelayMs > 0) {
-        await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
-      }
-
-      const { data, error } = await supabase
-        .from("matches")
-        .select("id")
-        .eq("id", matchId)
-        .maybeSingle();
-
-      if (data?.id) {
-        router.push(`/chat/${matchId}`);
-        return;
-      }
-
-      if (error) {
-        setErrorMessage(getFriendlyErrorMessage(error.message));
-        setIsEnteringBooth(false);
-        return;
-      }
-    }
-
-    setErrorMessage("Match is still syncing. Please try again in a moment.");
-    setIsEnteringBooth(false);
-  }
-
-  async function handleEnroll(course: Course) {
-    if (isSubmitting || isSearching || isInitialLoading) return;
-    if (!genderIdentity) {
-      setErrorMessage("Profile gender identity is missing. Re-run setup.");
-      return;
-    }
-
-    setErrorMessage("");
-    setIsSubmitting(true);
-
-    const parsed = enrolCourseSchema.safeParse({
-      p_course_id: course.id,
-      p_gender_identity: genderIdentity,
-      p_email_domain: emailDomain,
-    });
-
-    if (!parsed.success) {
-      setIsSubmitting(false);
-      setErrorMessage(
-        parsed.error.flatten().fieldErrors.p_course_id?.[0] ??
-        parsed.error.flatten().fieldErrors.p_gender_identity?.[0] ??
-        parsed.error.flatten().fieldErrors.p_email_domain?.[0] ??
-        "Invalid enrollment input.",
-      );
-      return;
-    }
-
-    const csrfToken = await getCsrfToken();
-    const response = await fetch("/api/matching", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        [CSRF_HEADER_NAME]: csrfToken,
-      },
-      body: JSON.stringify({
-        action: "enrol",
-        payload: parsed.data,
-      }),
-    });
-
-    setIsSubmitting(false);
-
-    if (!response.ok) {
-      const error = await handleProtectedResponse(response, () => router.push("/login"));
-      setErrorMessage(error ?? "Failed to enroll in course.");
-      return;
-    }
-
-    const payload = (await response.json()) as { matchId?: string | null };
-    const matchId = extractMatchId(payload.matchId ?? null);
-    if (matchId) {
-      const { data: matchRow } = await supabase
-        .from("matches")
-        .select("*")
-        .eq("id", matchId)
-        .single();
-
-      if (matchRow) {
-        setActiveCourse(course);
-        setIsSearching(false);
-        await fetchPartnerAndReveal(matchId, matchRow);
-      } else {
-        router.push(`/chat/${matchId}`);
-      }
-      return;
-    }
-
-    setActiveCourse(course);
-    setIsSearching(true);
-  }
-
-  async function handleCancelSearch() {
-    if (isCancelling) return;
-    setIsCancelling(true);
-    const csrfToken = await getCsrfToken();
-    const response = await fetch("/api/matching", {
-      method: "DELETE",
-      headers: {
-        [CSRF_HEADER_NAME]: csrfToken,
-      },
-    });
-    setIsCancelling(false);
-    if (!response.ok) {
-      const error = await handleProtectedResponse(response, () => router.push("/login"));
-      setErrorMessage(error ?? "Failed to cancel search.");
-      return;
-    }
-    setIsSearching(false);
-    setActiveCourse(null);
-    showToast("Search cancelled.", "info");
-  }
+    genderIdentity,
+    emailDomain,
+    pendingCourseId,
+    initialProfileStatus,
+    isInitialLoading,
+    isSessionChecking,
+    markStateRestored,
+    onNavigate,
+    onUnauthorized,
+    onToast,
+  });
 
   return (
     <>
@@ -580,7 +142,7 @@ export function MatchingHub({
           courseLabel={activeCourse.label}
           partner={revealState.partner}
           isEnteringBooth={isEnteringBooth}
-          onEnterBooth={() => void handleEnterBooth(revealState.matchId)}
+          onEnterBooth={() => void enterBooth(revealState.matchId)}
         />
       ) : null}
 
@@ -589,7 +151,7 @@ export function MatchingHub({
           courseLabel={activeCourse.label}
           broadenedSearchLabel={universityName?.trim() || emailDomain}
           isCancelling={isCancelling}
-          onCancel={handleCancelSearch}
+          onCancel={cancelSearch}
           onReady={isInitialLoading ? markRecoveryCompleteOnce : undefined}
         />
       ) : null}
@@ -614,7 +176,10 @@ export function MatchingHub({
             </div>
 
             {errorMessage ? (
-              <div className="w-full max-w-sm rounded-md border border-rose-400/40 bg-rose-950/80 px-3 py-2 text-sm text-rose-100">
+              <div
+                className="w-full max-w-sm rounded-md border border-rose-400/40 bg-rose-950/80 px-3 py-2 text-sm text-rose-100"
+                role="alert"
+              >
                 {errorMessage}
               </div>
             ) : null}
@@ -638,7 +203,7 @@ export function MatchingHub({
                 On Tap
               </h3>
               <span className="rounded-md border border-slate-700 px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-                {COURSES.length} Courses
+                {COURSES.length} {COURSES.length === 1 ? "Course" : "Courses"}
               </span>
             </div>
 
@@ -653,11 +218,13 @@ export function MatchingHub({
                     <div className="relative h-28 w-full shrink-0 sm:h-auto sm:w-1/3">
                       {course.imageUrl ? (
                         <>
-                          {/* eslint-disable-next-line @next/next/no-img-element -- external course image URL */}
-                          <img
+                          <Image
                             src={course.imageUrl}
                             alt=""
-                            className="absolute inset-0 h-full w-full object-cover opacity-80 transition-transform duration-500 group-hover:scale-105"
+                            fill
+                            sizes="(min-width: 640px) 33vw, 100vw"
+                            preload={course === COURSES[0]}
+                            className="object-cover opacity-80 transition-transform duration-500 group-hover:scale-105"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-stone-950 to-transparent sm:bg-gradient-to-r" />
                         </>
@@ -706,7 +273,7 @@ export function MatchingHub({
                           {course.code}
                         </p>
                         <p className="text-xs text-slate-400">
-                          You might match with someone who is into other course
+                          Starts with this course, then expands across your university.
                         </p>
                       </div>
                       <div className="mt-auto flex items-center justify-between border-t border-white/5 pt-2">
@@ -718,11 +285,11 @@ export function MatchingHub({
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleEnroll(course)}
+                          onClick={() => void enrolCourse(course)}
                           disabled={isSubmitting || isSearching || isInitialLoading}
                           className="group/btn flex items-center gap-1 rounded border border-primary-amber/50 bg-surface-dark py-2 px-5 font-mono text-sm font-bold text-primary-amber shadow-[0_0_10px_rgba(255,179,0,0.1)] transition-all hover:bg-primary-amber hover:text-black hover:shadow-[0_0_20px_rgba(255,179,0,0.4)] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isSubmitting ? "Enrolling..." : "Enroll"}
+                          {isSubmitting ? "Joining..." : "Find a match"}
                           {!isSubmitting && (
                             <span className="material-symbols-outlined text-[18px] transition-transform group-hover/btn:translate-x-1">
                               arrow_forward

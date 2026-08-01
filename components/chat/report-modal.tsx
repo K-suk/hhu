@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -24,6 +24,7 @@ type ReportModalProps = {
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: { category: ReportCategory; details: string }) => Promise<void>;
   isSubmitting: boolean;
+  submissionError?: string;
 };
 
 const categories: ReportCategory[] = [
@@ -53,6 +54,7 @@ export function ReportModal({
   onOpenChange,
   onSubmit,
   isSubmitting,
+  submissionError = "",
 }: ReportModalProps) {
   const {
     control,
@@ -61,7 +63,6 @@ export function ReportModal({
     register,
     reset,
     setValue,
-    watch,
   } = useForm<z.infer<typeof reportSchema>>({
     defaultValues: {
       category: undefined,
@@ -80,7 +81,7 @@ export function ReportModal({
     }
   }, [open, reset]);
 
-  const details = watch("details");
+  const details = useWatch({ control, name: "details" }) ?? "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -88,7 +89,8 @@ export function ReportModal({
         <DialogHeader>
           <DialogTitle>Report / Block</DialogTitle>
           <DialogDescription>
-            Submit this report to the Admin Board. This action ends the match.
+            Submit this report to the Admin Board. This ends the match and cannot
+            be undone.
           </DialogDescription>
         </DialogHeader>
 
@@ -105,30 +107,43 @@ export function ReportModal({
               name="category"
               render={({ field }) => (
                 <div
-                  role="listbox"
+                  role="radiogroup"
                   aria-labelledby="report-category-label"
+                  aria-describedby={
+                    errors.category || submissionError ? "report-form-error" : undefined
+                  }
                   className="grid gap-2"
                 >
                   {categories.map((item) => {
                     const selected = field.value === item;
                     return (
-                      <button
+                      <label
                         key={item}
-                        type="button"
-                        role="option"
-                        aria-selected={selected}
-                        disabled={isSubmitting}
-                        onClick={() => {
-                          field.onChange(item);
-                        }}
-                        className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                        className={`relative w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-amber ${
                           selected
                             ? "border-primary-amber/70 bg-amber-500/15 text-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.2)] ring-1 ring-primary-amber/35"
                             : "border-white/10 bg-zinc-950/80 text-zinc-200 hover:border-emerald-500/30 hover:bg-zinc-900"
                         }`}
                       >
-                        {item}
-                      </button>
+                        <input
+                          type="radio"
+                          name={field.name}
+                          value={item}
+                          checked={selected}
+                          onChange={() => field.onChange(item)}
+                          onBlur={field.onBlur}
+                          disabled={isSubmitting}
+                          className="sr-only"
+                        />
+                        <span className="flex items-center justify-between gap-2">
+                          {item}
+                          {selected ? (
+                            <span className="material-symbols-outlined text-base" aria-hidden="true">
+                              check
+                            </span>
+                          ) : null}
+                        </span>
+                      </label>
                     );
                   })}
                 </div>
@@ -152,12 +167,20 @@ export function ReportModal({
               rows={5}
               maxLength={1200}
               disabled={isSubmitting}
+              aria-invalid={Boolean(errors.details)}
+              aria-describedby={
+                errors.details || submissionError ? "report-form-error" : undefined
+              }
             />
           </div>
 
-          {errors.category?.message || errors.details?.message ? (
-            <p className="rounded-md border border-rose-300/40 bg-rose-950/80 px-3 py-2 text-sm text-rose-100">
-              {errors.category?.message ?? errors.details?.message}
+          {submissionError || errors.category?.message || errors.details?.message ? (
+            <p
+              id="report-form-error"
+              className="rounded-md border border-rose-300/40 bg-rose-950/80 px-3 py-2 text-sm text-rose-100"
+              role="alert"
+            >
+              {submissionError || errors.category?.message || errors.details?.message}
             </p>
           ) : null}
 

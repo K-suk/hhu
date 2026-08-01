@@ -1,28 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
 
 export default function SuspendedPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   async function handleLogout() {
     if (isSigningOut) return;
     setIsSigningOut(true);
-    const { error } = await supabase.auth.signOut();
-    setIsSigningOut(false);
 
-    // Even if signOut fails (rare), force navigation to login.
-    if (!error) {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      // The destination can recover or refresh the session even when local sign-out fails.
+    } finally {
+      setIsSigningOut(false);
+      // A suspended user cannot continue in-app, so always return to sign-in.
       router.replace("/login");
-      return;
     }
-
-    router.replace("/login");
   }
 
   return (
@@ -60,7 +60,7 @@ export default function SuspendedPage() {
           disabled={isSigningOut}
           className="mt-8 w-full rounded-full border border-rose-400/25 bg-rose-600/15 px-4 py-3 font-mono text-sm font-semibold text-rose-100 transition hover:bg-rose-600/25 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSigningOut ? "Logging out..." : "Logout"}
+          {isSigningOut ? "Logging out..." : "Log out"}
         </button>
 
         <p className="mt-4 font-mono text-[10px] tracking-wider text-slate-600 uppercase">

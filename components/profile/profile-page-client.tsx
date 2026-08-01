@@ -32,7 +32,6 @@ type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 type MatchRow = Database["public"]["Tables"]["matches"]["Row"];
 
 type ProfilePageClientProps = {
-  userId: string;
   initialProfile: ProfileRow;
   recentMatches: MatchRow[];
 };
@@ -65,7 +64,6 @@ function formatDate(date: string | null): string {
 }
 
 export function ProfilePageClient({
-  userId,
   initialProfile,
   recentMatches,
 }: ProfilePageClientProps) {
@@ -79,11 +77,11 @@ export function ProfilePageClient({
   const [successMessage, setSuccessMessage] = useState("");
   const {
     formState: { errors },
+    getValues,
     register,
     reset,
     setValue,
     trigger,
-    watch,
   } = useForm<ProfileUpdateInput>({
     defaultValues: {
       display_name: initialProfile.display_name ?? "",
@@ -145,8 +143,8 @@ export function ProfilePageClient({
     }
 
     const values = {
-      display_name: sanitizePlainTextInput(watch("display_name")),
-      department: sanitizePlainTextInput(watch("department")),
+      display_name: sanitizePlainTextInput(getValues("display_name")),
+      department: sanitizePlainTextInput(getValues("department")),
     };
     const parsed = profileUpdateSchema.safeParse({
       display_name: values.display_name,
@@ -372,8 +370,7 @@ export function ProfilePageClient({
                 Profile Image
               </p>
               <AvatarUpload
-                userId={userId}
-              csrfToken={csrfToken}
+                csrfToken={csrfToken}
                 initialAvatarUrl={profile.avatar_url}
                 onUploaded={(avatarUrl) => {
                   setProfile((prev) => ({ ...prev, avatar_url: avatarUrl }));

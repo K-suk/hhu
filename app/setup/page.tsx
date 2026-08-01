@@ -23,5 +23,5 @@ export default async function SetupPage() {
     redirect("/");
   }
 
-  return <SetupForm userId={user.id} initialAvatarUrl={profile?.avatar_url ?? null} />;
+  return <SetupForm initialAvatarUrl={profile?.avatar_url ?? null} />;
 }

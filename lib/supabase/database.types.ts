@@ -165,6 +165,42 @@ export type Database = {
         };
         Relationships: [];
       };
+      daily_reset_runs: {
+        Row: {
+          run_date: string;
+          cutoff_at: string;
+          completed_at: string | null;
+          status: string;
+          deleted_messages: number;
+          deleted_ratings: number;
+          deleted_matches: number;
+          deleted_queues: number;
+          reset_profiles: number;
+        };
+        Insert: {
+          run_date: string;
+          cutoff_at: string;
+          completed_at?: string | null;
+          status?: string;
+          deleted_messages?: number;
+          deleted_ratings?: number;
+          deleted_matches?: number;
+          deleted_queues?: number;
+          reset_profiles?: number;
+        };
+        Update: {
+          run_date?: string;
+          cutoff_at?: string;
+          completed_at?: string | null;
+          status?: string;
+          deleted_messages?: number;
+          deleted_ratings?: number;
+          deleted_matches?: number;
+          deleted_queues?: number;
+          reset_profiles?: number;
+        };
+        Relationships: [];
+      };
       university: {
         Row: {
           email_domain: string;
@@ -200,6 +236,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      daily_reset_job: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
       complete_profile_setup: {
         Args: {
           p_display_name: string;
@@ -246,6 +286,10 @@ export type Database = {
         Args: {
           p_match_id: string;
         };
+        Returns: undefined;
+      };
+      run_daily_reset_if_due: {
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       submit_grade: {

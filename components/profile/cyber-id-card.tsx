@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import type { Database } from "@/lib/supabase/database.types";
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
@@ -42,10 +44,13 @@ export function CyberIdCard({ profile }: CyberIdCardProps) {
               <div className="absolute inset-0 z-10 bg-[repeating-linear-gradient(0deg,transparent,transparent_1px,rgba(255,191,0,0.1)_2px,rgba(255,191,0,0.1)_3px)] opacity-60" />
               {avatarUrl ? (
                 <>
-                  <img
+                  <Image
                     src={avatarUrl}
                     alt="Student avatar"
-                    className="h-full w-full object-cover avatar-grain [image-rendering:pixelated]"
+                    fill
+                    sizes="64px"
+                    unoptimized
+                    className="object-cover avatar-grain [image-rendering:pixelated]"
                   />
                   <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(130deg,rgba(255,255,255,0.06)_0%,rgba(0,255,255,0.12)_40%,rgba(255,0,238,0.1)_70%,rgba(255,255,255,0.04)_100%)] mix-blend-screen" />
                 </>

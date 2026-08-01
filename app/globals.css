@@ -37,8 +37,14 @@ body {
   min-height: 100dvh;
   background: #101210;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
   overscroll-behavior-y: none;
+  text-rendering: optimizeLegibility;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #ffbf00;
+  outline-offset: 3px;
 }
 
 /* Hide footer while profile edit modal is open */
@@ -47,6 +53,18 @@ body.profile-edit-modal-open .taproom-footer {
 }
 
 .material-symbols-outlined {
+  font-family: var(--font-material-symbols);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
   font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
 }
 
@@ -296,4 +314,28 @@ body.profile-edit-modal-open .taproom-footer {
   );
   height: 22%;
   animation: recoveryScanVertical 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  svg animate,
+  svg animateTransform {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  header,
+  nav,
+  [role="dialog"] {
+    backdrop-filter: none !important;
+  }
 }

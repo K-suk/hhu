@@ -47,7 +47,6 @@ const styleSrc = unique(
   compact([
     "'self'",
     "'unsafe-inline'",
-    "https://fonts.googleapis.com",
   ]),
 );
 
@@ -77,7 +76,6 @@ const fontSrc = unique(
   compact([
     "'self'",
     "data:",
-    "https://fonts.gstatic.com",
   ]),
 );
 

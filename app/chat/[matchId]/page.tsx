@@ -11,6 +11,8 @@ type ChatPageProps = {
 
 export default async function ChatPage({ params }: ChatPageProps) {
   const { matchId } = await params;
+  let chatRoomProps: React.ComponentProps<typeof ChatRoom>;
+
   try {
     const session = await requireAuth();
     const authorizedMatch = await requireMatchParticipant(session, matchId);
@@ -20,13 +22,11 @@ export default async function ChatPage({ params }: ChatPageProps) {
       redirect("/");
     }
 
-    return (
-      <ChatRoom
-        currentUserId={session.user.id}
-        match={authorizedMatch.match}
-        initialMessages={[]}
-      />
-    );
+    chatRoomProps = {
+      currentUserId: session.user.id,
+      match: authorizedMatch.match,
+      initialMessages: [],
+    };
   } catch (error) {
     if (error instanceof AuthenticationError) {
       redirect("/login");
@@ -38,4 +38,6 @@ export default async function ChatPage({ params }: ChatPageProps) {
 
     throw error;
   }
+
+  return <ChatRoom {...chatRoomProps} />;
 }

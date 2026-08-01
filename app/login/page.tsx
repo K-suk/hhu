@@ -20,7 +20,7 @@ export default async function LoginPage() {
       {/* Subtle grid pattern */}
       <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(rgba(255,177,0,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,177,0,0.03)_1px,transparent_1px)] bg-[size:30px_30px]" />
 
-      <div className="relative z-10 flex w-full max-w-md flex-col items-center px-6 py-8 md:max-w-4xl md:px-10 lg:max-w-5xl">
+      <div className="relative z-10 flex w-full max-w-md flex-col items-center px-6 py-8 md:max-w-xl md:px-8">
         {/* Neon sign section */}
         <div className="mt-4 mb-8 flex shrink-0 flex-col items-center gap-6">
           <div className="font-mono text-sm uppercase tracking-[0.3em] text-primary-amber/60 z-10">

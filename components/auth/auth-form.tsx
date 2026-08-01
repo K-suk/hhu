@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -64,19 +64,17 @@ function extractDomainCandidate(email: string): string | null {
 
 function SubmitButton({
   mode,
-  disabled,
 }: {
   mode: "login" | "signup";
-  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
   const label = mode === "login" ? "ENTER" : "ENROLL";
-  const isDisabled = pending || disabled;
 
   return (
     <button
       type="submit"
-      disabled={isDisabled}
+      disabled={pending}
+      aria-describedby={mode === "signup" ? "signup-requirements" : undefined}
       className="group/btn relative mt-4 w-full overflow-hidden rounded-full bg-primary-amber p-[1px] disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div className="absolute inset-0 translate-x-[-100%] bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-1000 group-hover/btn:translate-x-[100%]" />
@@ -85,7 +83,10 @@ function SubmitButton({
           {pending ? "PROCESSING..." : label}
         </span>
         {!pending && (
-          <span className="material-symbols-outlined transition-transform group-hover/btn:translate-x-1">
+          <span
+            className="material-symbols-outlined transition-transform group-hover/btn:translate-x-1"
+            aria-hidden="true"
+          >
             login
           </span>
         )}
@@ -102,6 +103,7 @@ export function AuthForm() {
   const [isKnownUniversityDomain, setIsKnownUniversityDomain] = useState(false);
   const [universityLookupStatus, setUniversityLookupStatus] =
     useState<UniversityLookupStatus>("idle");
+  const [universityLookupAttempt, setUniversityLookupAttempt] = useState(0);
   const [hasAgreedToCompliance, setHasAgreedToCompliance] = useState(false);
   const [hasAttemptedInvalidSignUp, setHasAttemptedInvalidSignUp] =
     useState(false);
@@ -114,11 +116,12 @@ export function AuthForm() {
     INITIAL_AUTH_STATE,
   );
   const {
+    control,
     formState: { errors },
+    getValues,
     register,
     setValue,
     trigger,
-    watch,
   } = useForm<AuthFormValues>({
     defaultValues: {
       birth_date: "",
@@ -137,8 +140,8 @@ export function AuthForm() {
 
   const state = mode === "login" ? loginState : signUpState;
   const formAction = mode === "login" ? loginFormAction : signUpFormAction;
-  const watchedEmail = watch("email");
-  const watchedBirthDate = watch("birth_date");
+  const watchedEmail = useWatch({ control, name: "email" }) ?? "";
+  const watchedBirthDate = useWatch({ control, name: "birth_date" }) ?? "";
   const age = calculateAge(watchedBirthDate);
   const isUnderAge = mode === "signup" && age !== null && age < requiredMinAge;
   const hasValidAgeForSignUp =
@@ -147,10 +150,21 @@ export function AuthForm() {
   const hasDomainInput = emailDomain !== null;
   const canSubmitSignUp =
     isKnownUniversityDomain && hasValidAgeForSignUp && hasAgreedToCompliance;
-
-  useEffect(() => {
-    setMode(requestedMode);
-  }, [requestedMode]);
+  const signUpBlockReason = !hasDomainInput
+    ? "Enter your university email, date of birth, and confirm the terms to continue."
+    : universityLookupStatus === "loading"
+      ? "Checking whether your university is supported..."
+      : universityLookupStatus === "error"
+        ? "We could not verify your university. Check your connection and try again."
+        : !isKnownUniversityDomain
+          ? "Use a supported university email or request to add your university."
+          : age === null
+            ? "Enter your complete date of birth to continue."
+            : isUnderAge
+              ? `You must be ${requiredMinAge}+ to join HHU.`
+              : !hasAgreedToCompliance
+                ? "Confirm your age and agreement to the terms to continue."
+                : null;
 
   useEffect(() => {
     const isComplete =
@@ -168,9 +182,6 @@ export function AuthForm() {
 
     const domain = extractDomainCandidate(watchedEmail);
     if (!domain) {
-      setIsKnownUniversityDomain(false);
-      setRequiredMinAge(DEFAULT_MIN_AGE);
-      setUniversityLookupStatus("idle");
       return;
     }
 
@@ -193,6 +204,10 @@ export function AuthForm() {
           setUniversityLookupStatus("success");
         })
         .catch(() => {
+          if (controller.signal.aborted) {
+            return;
+          }
+
           setIsKnownUniversityDomain(false);
           setRequiredMinAge(DEFAULT_MIN_AGE);
           setUniversityLookupStatus("error");
@@ -203,13 +218,13 @@ export function AuthForm() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [mode, watchedEmail]);
+  }, [mode, universityLookupAttempt, watchedEmail]);
 
   async function handleFormSubmit(event: React.FormEvent<HTMLFormElement>) {
     const values = {
       birth_date: watchedBirthDate,
       email: watchedEmail,
-      password: watch("password"),
+      password: getValues("password"),
     };
     const parsed =
       mode === "login"
@@ -257,32 +272,56 @@ export function AuthForm() {
       >
         {/* Email */}
         <div className="flex flex-col gap-1.5">
-          <label className="pl-4 font-mono text-xs uppercase tracking-wider text-primary-amber/80">
+          <label
+            htmlFor="auth-email"
+            className="pl-4 font-mono text-xs uppercase tracking-wider text-primary-amber/80"
+          >
             Student Email
           </label>
           <div className="relative flex items-center">
-            <span className="material-symbols-outlined absolute left-4 text-slate-400">
+            <span
+              className="material-symbols-outlined absolute left-4 text-slate-400"
+              aria-hidden="true"
+            >
               badge
             </span>
             <input
               {...register("email")}
+              id="auth-email"
               name="email"
               type="email"
               autoComplete="email"
               placeholder={
-                mode === "signup" ? "you student email" : "student email"
+                mode === "signup" ? "your student email" : "student email"
               }
               required
+              aria-invalid={Boolean(errors.email || state.fieldErrors?.email?.[0])}
+              aria-describedby={
+                errors.email?.message || state.fieldErrors?.email?.[0]
+                  ? "auth-email-error"
+                  : undefined
+              }
               onChange={(event) => {
-                event.target.value = sanitizeInlineTextInput(
+                const nextEmail = sanitizeInlineTextInput(
                   event.target.value.toLowerCase(),
                 );
+                event.target.value = nextEmail;
+                setValue(
+                  "email",
+                  nextEmail,
+                  { shouldDirty: true, shouldValidate: true },
+                );
+                setIsKnownUniversityDomain(false);
+                setUniversityLookupStatus(
+                  extractDomainCandidate(nextEmail) ? "loading" : "idle",
+                );
+                setHasAttemptedInvalidSignUp(false);
               }}
               className="w-full rounded-full border border-white/10 bg-black/40 py-4 pl-12 pr-4 font-mono text-white outline-none placeholder:text-slate-600 transition-all focus:border-primary-amber/50 focus:bg-black/60 focus:ring-1 focus:ring-primary-amber/50"
             />
           </div>
           {errors.email?.message || state.fieldErrors?.email?.[0] ? (
-            <p className="pl-4 text-xs text-rose-400">
+            <p id="auth-email-error" className="pl-4 text-xs text-rose-400" role="alert">
               {errors.email?.message ?? state.fieldErrors?.email?.[0]}
             </p>
           ) : null}
@@ -290,11 +329,26 @@ export function AuthForm() {
 
         {mode === "signup" ? (
           <div className="flex flex-col gap-1.5">
-            <label className="pl-4 font-mono text-xs uppercase tracking-wider text-primary-amber/80">
+            <p
+              id="birth-date-label"
+              className="pl-4 font-mono text-xs uppercase tracking-wider text-primary-amber/80"
+            >
               Date Of Birth
-            </label>
-            <div className="relative flex w-full items-center rounded-full border border-white/10 bg-black/40 py-4 pl-12 pr-4 transition-all focus-within:border-primary-amber/50 focus-within:bg-black/60 focus-within:ring-1 focus-within:ring-primary-amber/50">
-              <span className="material-symbols-outlined absolute left-4 text-slate-400">
+            </p>
+            <div
+              role="group"
+              aria-labelledby="birth-date-label"
+              aria-describedby={
+                errors.birth_date?.message || state.fieldErrors?.birth_date?.[0]
+                  ? "birth-date-error"
+                  : undefined
+              }
+              className="relative flex w-full items-center rounded-full border border-white/10 bg-black/40 py-1.5 pl-12 pr-4 transition-all focus-within:border-primary-amber/50 focus-within:bg-black/60 focus-within:ring-1 focus-within:ring-primary-amber/50"
+            >
+              <span
+                className="material-symbols-outlined absolute left-4 text-slate-400"
+                aria-hidden="true"
+              >
                 cake
               </span>
               <input {...register("birth_date")} type="hidden" />
@@ -304,13 +358,16 @@ export function AuthForm() {
                 pattern="[0-9]*"
                 maxLength={4}
                 placeholder="YYYY"
+                aria-label="Birth year"
+                autoComplete="bday-year"
                 value={birthYear}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "").slice(0, 4);
                   setBirthYear(val);
+                  setHasAttemptedInvalidSignUp(false);
                   if (val.length === 4) monthInputRef.current?.focus();
                 }}
-                className="w-14 bg-transparent font-mono text-center text-white outline-none placeholder:text-slate-600"
+                className="min-h-11 w-16 bg-transparent font-mono text-center text-white outline-none placeholder:text-slate-600"
               />
               <span className="px-1 font-mono text-slate-500">—</span>
               <input
@@ -320,13 +377,16 @@ export function AuthForm() {
                 pattern="[0-9]*"
                 maxLength={2}
                 placeholder="MM"
+                aria-label="Birth month"
+                autoComplete="bday-month"
                 value={birthMonth}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "").slice(0, 2);
                   setBirthMonth(val);
+                  setHasAttemptedInvalidSignUp(false);
                   if (val.length === 2) dayInputRef.current?.focus();
                 }}
-                className="w-10 bg-transparent font-mono text-center text-white outline-none placeholder:text-slate-600"
+                className="min-h-11 w-12 bg-transparent font-mono text-center text-white outline-none placeholder:text-slate-600"
               />
               <span className="px-1 font-mono text-slate-500">—</span>
               <input
@@ -336,16 +396,19 @@ export function AuthForm() {
                 pattern="[0-9]*"
                 maxLength={2}
                 placeholder="DD"
+                aria-label="Birth day"
+                autoComplete="bday-day"
                 value={birthDay}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "").slice(0, 2);
                   setBirthDay(val);
+                  setHasAttemptedInvalidSignUp(false);
                 }}
-                className="w-10 bg-transparent font-mono text-center text-white outline-none placeholder:text-slate-600"
+                className="min-h-11 w-12 bg-transparent font-mono text-center text-white outline-none placeholder:text-slate-600"
               />
             </div>
             {errors.birth_date?.message || state.fieldErrors?.birth_date?.[0] ? (
-              <p className="pl-4 text-xs text-rose-400">
+              <p id="birth-date-error" className="pl-4 text-xs text-rose-400" role="alert">
                 {errors.birth_date?.message ?? state.fieldErrors?.birth_date?.[0]}
               </p>
             ) : null}
@@ -354,15 +417,22 @@ export function AuthForm() {
 
         {/* Password */}
         <div className="flex flex-col gap-1.5">
-          <label className="pl-4 font-mono text-xs uppercase tracking-wider text-primary-amber/80">
-            Passcode
+          <label
+            htmlFor="auth-password"
+            className="pl-4 font-mono text-xs uppercase tracking-wider text-primary-amber/80"
+          >
+            Password
           </label>
           <div className="relative flex items-center">
-            <span className="material-symbols-outlined absolute left-4 text-slate-400">
+            <span
+              className="material-symbols-outlined absolute left-4 text-slate-400"
+              aria-hidden="true"
+            >
               password
             </span>
             <input
               {...register("password")}
+              id="auth-password"
               name="password"
               type="password"
               autoComplete={
@@ -370,12 +440,27 @@ export function AuthForm() {
               }
               placeholder="••••••••"
               required
+              aria-invalid={Boolean(
+                errors.password || state.fieldErrors?.password?.[0],
+              )}
+              aria-describedby={
+                errors.password?.message || state.fieldErrors?.password?.[0]
+                  ? "auth-password-error"
+                  : mode === "signup"
+                    ? "auth-password-help"
+                    : undefined
+              }
               className="w-full rounded-full border border-white/10 bg-black/40 py-4 pl-12 pr-4 font-mono text-white outline-none placeholder:text-slate-600 transition-all focus:border-primary-amber/50 focus:bg-black/60 focus:ring-1 focus:ring-primary-amber/50"
             />
           </div>
           {errors.password?.message || state.fieldErrors?.password?.[0] ? (
-            <p className="pl-4 text-xs text-rose-400">
+            <p id="auth-password-error" className="pl-4 text-xs text-rose-400" role="alert">
               {errors.password?.message ?? state.fieldErrors?.password?.[0]}
+            </p>
+          ) : null}
+          {mode === "signup" && !errors.password?.message ? (
+            <p id="auth-password-help" className="pl-4 text-xs text-slate-500">
+              Use at least 8 characters.
             </p>
           ) : null}
         </div>
@@ -383,6 +468,7 @@ export function AuthForm() {
         {/* Status message */}
         {state.message ? (
           <p
+            role={state.status === "error" ? "alert" : "status"}
             className={`rounded-xl border px-4 py-2.5 text-xs ${state.status === "error"
               ? "border-rose-400/30 bg-rose-950/40 text-rose-300"
               : "border-emerald-400/30 bg-emerald-950/40 text-emerald-300"
@@ -395,8 +481,11 @@ export function AuthForm() {
         {mode === "signup" ? (
           <div className="pl-4 text-xs text-slate-500">
             <p>Sign-up is restricted to student emails.</p>
-            <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
-              <span className="material-symbols-outlined text-[14px] text-slate-500">
+            <div className="mt-1 flex min-h-11 items-center gap-1 text-[11px] text-slate-400">
+              <span
+                className="material-symbols-outlined text-[14px] text-slate-500"
+                aria-hidden="true"
+              >
                 school
               </span>
               <Link
@@ -428,14 +517,25 @@ export function AuthForm() {
         ) : null}
 
         {mode === "signup" && universityLookupStatus === "error" ? (
-          <p className="pl-4 text-xs text-amber-300">
-            We could not verify your university domain right now. Please try
-            again in a moment.
-          </p>
+          <div className="flex items-center justify-between gap-3 pl-4">
+            <p id="signup-requirements" className="text-xs text-amber-300" role="alert">
+              We could not verify your university domain. Check your connection and try again.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setUniversityLookupStatus("loading");
+                setUniversityLookupAttempt((attempt) => attempt + 1);
+              }}
+              className="min-h-11 shrink-0 rounded-full border border-amber-300/30 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-300/10"
+            >
+              Try again
+            </button>
+          </div>
         ) : null}
 
-        {mode === "signup" ? (
-          <div className="flex items-start gap-2 pl-4">
+        {mode === "signup" && universityLookupStatus !== "error" ? (
+          <div className="flex min-h-11 items-start gap-3 rounded-lg pl-4">
             <input
               id="compliance"
               type="checkbox"
@@ -446,9 +546,9 @@ export function AuthForm() {
                   setHasAttemptedInvalidSignUp(false);
                 }
               }}
-              className="mt-0.5 h-4 w-4 rounded border-white/30 bg-black/40 text-primary-amber focus:ring-primary-amber/60"
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-white/30 bg-black/40 text-primary-amber focus:ring-primary-amber/60"
             />
-            <label htmlFor="compliance" className="text-xs text-slate-300">
+            <label htmlFor="compliance" className="cursor-pointer text-sm leading-5 text-slate-300">
               I confirm that I am {requiredMinAge}+ and agree to the{" "}
               <Link href="/terms" className="text-blue-400 underline">
                 Terms of Service
@@ -462,20 +562,23 @@ export function AuthForm() {
           </div>
         ) : null}
 
-        {mode === "signup" && hasAttemptedInvalidSignUp ? (
-          <p className="pl-4 text-xs text-rose-400">
-            You must agree to the terms and be {requiredMinAge}+ to continue.
+        {mode === "signup" ? (
+          <p
+            id="signup-requirements"
+            className={`pl-4 text-xs ${
+              signUpBlockReason
+                ? hasAttemptedInvalidSignUp
+                  ? "text-rose-400"
+                  : "text-slate-400"
+                : "text-emerald-300"
+            }`}
+            role={hasAttemptedInvalidSignUp ? "alert" : "status"}
+          >
+            {signUpBlockReason ?? "You're ready to create your HHU account."}
           </p>
         ) : null}
 
-        {mode === "signup" && isUnderAge ? (
-          <p className="pl-4 text-xs text-rose-400">
-            You must be {requiredMinAge}+ to enter HHU. Grab a soda and come
-            back later! 🥤
-          </p>
-        ) : null}
-
-        <SubmitButton mode={mode} disabled={mode === "signup" && !canSubmitSignUp} />
+        <SubmitButton mode={mode} />
       </form>
 
       {/* Divider */}
@@ -492,7 +595,7 @@ export function AuthForm() {
           <button
             type="button"
             onClick={toggleAuthMode}
-            className="ml-1 font-bold text-primary-amber decoration-primary-amber decoration-2 underline-offset-4 hover:underline"
+            className="ml-1 inline-flex min-h-11 items-center rounded-md px-1 font-bold text-primary-amber decoration-primary-amber decoration-2 underline-offset-4 hover:underline"
           >
             {mode === "login" ? "Sign up" : "Enter Here"}
           </button>

@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
+import Image from "next/image";
 import { Controller, useForm, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -22,7 +23,6 @@ import {
 } from "@/lib/validations/matching";
 
 type SetupFormProps = {
-  userId: string;
   initialAvatarUrl: string | null;
 };
 
@@ -93,12 +93,12 @@ function GenderIdentityField({ control, onPreviewUpdate }: GenderIdentityFieldPr
   );
 }
 
-export function SetupForm({ userId, initialAvatarUrl }: SetupFormProps) {
+export function SetupForm({ initialAvatarUrl }: SetupFormProps) {
   const [state, formAction] = useActionState(
     completeSetupAction,
     INITIAL_SETUP_PROFILE_STATE,
   );
-  const [toast, setToast] = useState("");
+  const [securityError, setSecurityError] = useState("");
   const [displayNamePreview, setDisplayNamePreview] = useState("J. DOE");
   const [departmentPreview, setDepartmentPreview] = useState("UNDECLARED");
   const [genderPreview, setGenderPreview] = useState("UNSET");
@@ -123,21 +123,6 @@ export function SetupForm({ userId, initialAvatarUrl }: SetupFormProps) {
   });
 
   useEffect(() => {
-    if (state.status === "error" && state.message) {
-      setToast(getFriendlyErrorMessage(state.message));
-    }
-  }, [state]);
-
-  useEffect(() => {
-    if (!toast) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => setToast(""), 3500);
-    return () => clearTimeout(timeoutId);
-  }, [toast]);
-
-  useEffect(() => {
     let isMounted = true;
 
     void getCsrfToken()
@@ -148,7 +133,9 @@ export function SetupForm({ userId, initialAvatarUrl }: SetupFormProps) {
       })
       .catch(() => {
         if (isMounted) {
-          setToast("Security token bootstrap failed. Refresh and try again.");
+          setSecurityError(
+            "We could not prepare this form securely. Refresh the page and try again.",
+          );
         }
       });
 
@@ -168,9 +155,12 @@ export function SetupForm({ userId, initialAvatarUrl }: SetupFormProps) {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f3a2f_0%,#111_35%,#000_100%)] font-display text-white">
       <div className="mx-auto pt-[24px] flex min-h-screen w-full max-w-md flex-col overflow-hidden bg-black shadow-2xl md:my-4 md:min-h-[calc(100vh-2rem)] md:max-w-4xl md:rounded-3xl md:border md:border-white/10 lg:max-w-5xl">
-        {toast ? (
-          <div className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-xl border border-rose-300/40 bg-rose-950/95 px-3 py-2 text-sm text-rose-100 shadow-[0_0_20px_rgba(251,113,133,0.25)] md:max-w-xl">
-            {toast}
+        {state.status === "error" && state.message || securityError ? (
+          <div
+            className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-xl border border-rose-300/40 bg-rose-950/95 px-3 py-2 text-sm text-rose-100 shadow-[0_0_20px_rgba(251,113,133,0.25)] md:max-w-xl"
+            role="alert"
+          >
+            {securityError || getFriendlyErrorMessage(state.message)}
           </div>
         ) : null}
 
@@ -218,10 +208,13 @@ export function SetupForm({ userId, initialAvatarUrl }: SetupFormProps) {
                     <div className="relative size-20 shrink-0 overflow-hidden rounded border border-[#ffbf00]/40 bg-black/60">
                       <div className="absolute inset-0 z-10 bg-[repeating-linear-gradient(0deg,transparent,transparent_1px,rgba(255,191,0,0.1)_2px,rgba(255,191,0,0.1)_3px)] opacity-60" />
                       {avatarPreviewUrl ? (
-                        <img
+                        <Image
                           src={avatarPreviewUrl}
                           alt="Student avatar preview"
-                          className="h-full w-full object-cover [image-rendering:pixelated]"
+                          fill
+                          sizes="80px"
+                          unoptimized
+                          className="object-cover [image-rendering:pixelated]"
                         />
                       ) : (
                         <div className="flex h-full w-full flex-col items-center justify-center text-[#ffbf00]/40">
@@ -365,7 +358,6 @@ export function SetupForm({ userId, initialAvatarUrl }: SetupFormProps) {
                 Profile Image
               </p>
               <AvatarUpload
-                userId={userId}
                 csrfToken={csrfToken}
                 initialAvatarUrl={avatarPreviewUrl}
                 onUploaded={(url) => setAvatarPreviewUrl(url)}
